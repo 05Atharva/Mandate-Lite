@@ -27,10 +27,67 @@ npm start
 
 The SQLite database is stored in `data/mandate.sqlite` by default. Seed is idempotent and preserves existing financial state. The active pilot mandate is immutable; revocation prevents future attempts. Uncertain external operations keep their reservation until reconciled.
 
-## Implementation status
+## Using the prototype
 
-- Implemented: seeded catalog, strict basket validation, immutable mandate, atomic reservations, exact approval binding, durable PayPal operations, conservative reconciliation, credential separation and CSRF protection.
-- In progress: React owner console and purchase desk, broader integration tests.
-- Pending external evidence: real PayPal buyer-consent/capture/cancel and five real model planning prompts. These require configured accounts; unit fixtures are not live evidence.
+1. Sign in using `OWNER_PASSWORD`. Open **Spending mandate** and activate the default $400 pilot, $200 order cap, and owner review above $150. Activation is one-time and locks the rules. The expiry field uses your browser's local time.
+2. Open **Purchase desk**. Describe a need to call the real model, or choose **Select from catalog manually**. Manual baskets are labelled as manual in the audit.
+3. Submit one coffee ($18), one celebration hamper ($180), or one espresso machine ($900) to exercise allow, review and block. Requests reserve budget for 15 minutes. Hard failures do not reserve budget or call PayPal.
+4. Approve a review request from its details drawer. **Continue to PayPal** creates a saved sandbox order and hands off to the buyer. Use a sandbox buyer distinct from the seller.
+5. After the buyer returns, choose **Verify & capture**. A return URL never charges by itself. The server verifies the saved order, amount, currency and merchant before claiming capture.
+6. For an uncertain payment, choose **Refresh provider state**. It reads the saved order and commits a completed capture exactly once. Pending or unverified payments keep their reservation.
+
+The overview shows spent, reserved and available funds, a review queue, searchable purchase activity and JSON audit export. Request details include frozen prices, rule IDs, exact owner approval, operation IDs and provider references. There is no role-switch control granting permissions.
+
+## Credentials and integrations
+
+Set long, distinct owner and agent credentials. For example, run this twice and use each output for a separate value in your untracked `.env`:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+| Variable                                   | Purpose                                                                    |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| `OWNER_PASSWORD`                           | Owner sign-in; salted scrypt comparison; eight-hour HTTP-only session      |
+| `AGENT_API_KEY`                            | Agent bearer credential; proposal/planning access only                     |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox seller REST application credentials                                |
+| `PAYPAL_MERCHANT_ID`                       | Expected seller merchant/account ID; verified before capture               |
+| `OPENAI_API_KEY`                           | Server-side Responses API credential                                       |
+| `OPENAI_MODEL`                             | Structured-output-capable model; defaults to `gpt-4.1-mini`                |
+| `APP_URL`                                  | Exact public origin, without a path; local default `http://localhost:3000` |
+| `DATABASE_PATH`                            | Persistent SQLite path, default `./data/mandate.sqlite`                    |
+| `COOKIE_SECURE`                            | `true` for HTTPS deployments; required outside localhost                   |
+
+Only PayPal's sandbox API is supported. No live-mode switch is present. Missing model configuration disables AI planning; missing seller configuration disables checkout. Configured is not the same as successfully verified. Do not place secrets in `VITE_` variables, screenshots, exported records, or commits.
+
+Agent clients send `Authorization: Bearer <AGENT_API_KEY>`. `POST /api/intents` also requires an `Idempotency-Key` of 8–100 letters, numbers, underscores or hyphens. Example body:
+
+```json
+{
+  "title": "Office coffee restock",
+  "currency": "USD",
+  "items": [{ "sku": "COFFEE-01", "quantity": 1 }]
+}
+```
+
+`POST /api/plans` accepts `{ "need": "..." }`. To preserve AI provenance, submit its saved `planId` with the matching items. Modified selections must be submitted as manual. Agents cannot activate/revoke a mandate, approve, create checkout, capture, reconcile or read the owner audit.
+
+## Architecture and validation
+
+React/Vite/TypeScript in `src/`, Express in `server/`, shared types in `shared/`. Express serves the production frontend in the same process. SQLite uses WAL, foreign keys, uniqueness constraints and `BEGIN IMMEDIATE` reservation transactions. The ledger and operation claims commit before external calls; no database lock waits on PayPal or the model.
+
+Model selections use strict Structured Outputs and additional server validation. Client amounts/categories/approval flags are rejected. Owner mutations require both the application origin and a session CSRF token. Login, planning and API routes are rate-limited. Authentication and provider errors are sanitized.
+
+`npm test` exercises policy boundaries, aggregation, tampering, HTTP credential separation/CSRF, actual multi-process reservation contention, duplicate claims, pending/declined/lost responses, revocation races and on-disk restart recovery. Payment tests use an explicit injected provider in an isolated database; the runtime has no fixture-payment mode.
+
+Follow [the integration checklist](docs/INTEGRATION_CHECKLIST.md) for account-dependent acceptance. Real PayPal buyer consent/capture/cancel, five real model prompts and browser layout checks remain required evidence. Automated adapter fixtures are not live evidence.
+
+## Limits
+
+This prototype governs this merchant integration, not purchases made elsewhere. The owner is the expense approver; the PayPal participant separately consents to pay. Sandbox pickup, zero shipping and zero tax are disclosed fixtures, not general store rules. Audit history is append-only through app routes, not tamper-proof against a database administrator.
+
+Create timeouts permit bounded recovery using the original operation key for five minutes, within the documented standard provider retention window. After that, inspect the provider operation manually; the app does not guess or create a new order. Capture uncertainty is resolved by reads rather than blind recapture. A capture already claimed before revocation may still complete.
+
+The immutable pilot has no replacement/reset UI, automatic monthly resets, refund handling, stock integration, webhooks or multi-tenant identity. Use a fresh separately named database for a separate isolated pilot; never delete an unresolved ledger to free budget.
 
 The built-in Node SQLite API currently emits an experimental-feature warning. This prototype uses one server process and persistent local storage; do not deploy multiple replicas or place the ledger on an ephemeral disk.
