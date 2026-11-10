@@ -720,6 +720,16 @@ export function App() {
               health={health}
               hasMandate={Boolean(m)}
               onSubmitted={(p) => {
+                // The response already contains the persisted purchase. Seed the
+                // drawer immediately while refreshing budget and audit state.
+                setData((current) =>
+                  current
+                    ? {
+                        ...current,
+                        purchases: [p, ...current.purchases.filter((item) => item.id !== p.id)],
+                      }
+                    : current,
+                );
                 setSelectedId(p.id);
                 refresh().catch((e) => setError(e.message));
               }}
@@ -1411,7 +1421,7 @@ function PurchaseDrawer({
       if (e.key === 'Escape' && !busy) onClose();
       if (e.key === 'Tab') {
         const elements = dialog.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),a[href],input,select,textarea,[tabindex="0"]',
+          'button:not(:disabled),a[href],input,select,textarea,summary,[tabindex="0"]',
         );
         if (!elements?.length) return;
         const first = elements[0];

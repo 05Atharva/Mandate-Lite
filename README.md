@@ -80,7 +80,7 @@ Model selections use strict Structured Outputs and additional server validation.
 
 `npm test` exercises policy boundaries, aggregation, tampering, HTTP credential separation/CSRF, actual multi-process reservation contention, duplicate claims, pending/declined/lost responses, revocation races and on-disk restart recovery. Payment tests use an explicit injected provider in an isolated database; the runtime has no fixture-payment mode.
 
-Follow [the integration checklist](docs/INTEGRATION_CHECKLIST.md) for account-dependent acceptance. Real PayPal buyer consent/capture/cancel, five real model prompts and browser layout checks remain required evidence. Automated adapter fixtures are not live evidence.
+Desktop and mobile owner flows were checked in the browser; see [the visual QA record](docs/VISUAL_QA.md) for the exercised cases and two fixes. Follow [the integration checklist](docs/INTEGRATION_CHECKLIST.md) for account-dependent acceptance. Real PayPal buyer consent/capture/cancel and five real model prompts remain required evidence. Automated adapter fixtures are not live evidence.
 
 ## Limits
 
