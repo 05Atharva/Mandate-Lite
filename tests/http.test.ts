@@ -141,6 +141,12 @@ test('HTTP enforces session, CSRF, owner/agent separation and saved-order bindin
       200,
     );
     const audit = await (await call('/audit', undefined, owner)).text();
+    const filteredAudit = (await (
+      await call(`/audit?requestId=${p.id}`, undefined, owner)
+    ).json()) as { purchases: Purchase[]; events: { requestId: string | null }[] };
+    assert.equal(filteredAudit.purchases.length, 1);
+    assert.ok(filteredAudit.events.every((e) => e.requestId === p.id));
+    assert.equal((await call('/audit?state=UNKNOWN', undefined, owner)).status, 400);
     assert.ok(!audit.includes(config.ownerPassword));
     assert.ok(!audit.includes(config.agentKey));
     assert.ok(!audit.includes(csrfToken));

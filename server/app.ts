@@ -311,11 +311,48 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       audit: store.events(),
     });
   });
-  app.get('/api/audit', owner, (_req, res) => {
+  app.get('/api/audit', owner, (req, res) => {
     store.expire();
+    const query = z
+      .strictObject({
+        requestId: z.string().uuid().optional(),
+        state: z
+          .enum([
+            'BLOCKED',
+            'REVIEW',
+            'READY',
+            'CREATING_ORDER',
+            'CREATE_UNKNOWN',
+            'CHECKOUT',
+            'CAPTURING',
+            'CHECKING',
+            'CAPTURED',
+            'REJECTED',
+            'EXPIRED',
+            'REVOKED',
+            'CANCELLED',
+            'FAILED',
+          ])
+          .optional(),
+        search: z.string().max(160).optional(),
+      })
+      .parse(req.query);
+    const purchases = store
+      .list()
+      .filter(
+        (p) =>
+          (!query.requestId || p.id === query.requestId) &&
+          (!query.state || p.state === query.state) &&
+          (!query.search ||
+            `${p.title} ${p.id}`.toLowerCase().includes(query.search.toLowerCase())),
+      );
+    const ids = new Set(purchases.map((p) => p.id));
+    const filtered = Boolean(query.requestId || query.state || query.search);
     res.json({
-      events: store.events(),
-      purchases: store.list(),
+      events: store
+        .events()
+        .filter((e) => !filtered || Boolean(e.requestId && ids.has(e.requestId))),
+      purchases,
       mandate: store.mandate(),
       budget: store.budget(),
     });

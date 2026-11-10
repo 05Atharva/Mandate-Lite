@@ -36,7 +36,9 @@ The SQLite database is stored in `data/mandate.sqlite` by default. Seed is idemp
 5. After the buyer returns, choose **Verify & capture**. A return URL never charges by itself. The server verifies the saved order, amount, currency and merchant before claiming capture.
 6. For an uncertain payment, choose **Refresh provider state**. It reads the saved order and commits a completed capture exactly once. Pending or unverified payments keep their reservation.
 
-The overview shows spent, reserved and available funds, a review queue, searchable purchase activity and JSON audit export. Request details include frozen prices, rule IDs, exact owner approval, operation IDs and provider references. There is no role-switch control granting permissions.
+The overview shows spent, reserved and available funds, a review queue, searchable purchase activity and JSON audit export. **Advanced audit** opens AG Grid Community on desktop with sorting, column filters and filtered CSV export; mobile keeps the request cards. Formula-like CSV cells are neutralized. Request details include frozen prices, rule IDs, exact owner approval, operation IDs and provider references. There is no role-switch control granting permissions.
+
+`/replay` provides a separate read-only walkthrough of clearly labelled simulated scenarios. It needs no credentials and never calls a provider or changes the ledger. Its fixture receipts are not live payment evidence.
 
 ## Credentials and integrations
 
@@ -97,6 +99,19 @@ Model selections use strict Structured Outputs and additional server validation.
 `npm test` exercises policy boundaries, aggregation, tampering, HTTP credential separation/CSRF, actual multi-process reservation contention, duplicate claims, pending/declined/lost responses, revocation races and on-disk restart recovery. Payment tests use an explicit injected provider in an isolated database; the runtime has no fixture-payment mode.
 
 Desktop and mobile owner flows were checked in the browser; see [the visual QA record](docs/VISUAL_QA.md) for the exercised cases and two fixes. Follow [the integration checklist](docs/INTEGRATION_CHECKLIST.md) for account-dependent acceptance. Real PayPal buyer consent/capture/cancel and five real model prompts remain required evidence. Automated adapter fixtures are not live evidence.
+
+Additional checks:
+
+```powershell
+npm run verify:fresh
+npm run benchmark
+# Opt-in real provider calls; requires the chosen key and may incur charges:
+npm run evaluate:model
+```
+
+The fresh-setup check uses an isolated copy under `.local/`, installs from the lockfile, runs tests/build/seed and verifies the production server, login and a manual policy request. It does not call model/payment providers. A 200-request local transaction benchmark measured p95 1.922 ms on the development machine; this is a local measurement, not a hosted performance guarantee. The model evaluation records outputs and latency for the five PRD prompts in untracked `data/model-evaluation.json`; human review remains required.
+
+See [PRD coverage](docs/PRD_COVERAGE.md) and the [submission preparation draft](docs/SUBMISSION.md). Builds retain bundled browser dependency license notices at `dist/client/third-party-licenses.txt`; server/development dependencies retain their package licenses. AG Grid uses Community features only.
 
 ## Limits
 

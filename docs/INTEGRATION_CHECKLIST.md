@@ -1,6 +1,6 @@
 # Live integration gate
 
-Status: **not executed**. This file records required checks, not claimed results. Use isolated sandbox accounts and retain redacted request/order/capture references when actually running the gate.
+Live gate status: **not executed**. Local automated and browser checks are recorded in [VISUAL_QA.md](VISUAL_QA.md) and [PRD_COVERAGE.md](PRD_COVERAGE.md). Use isolated sandbox accounts and retain redacted request/order/capture references when actually running the live gate.
 
 ## Prerequisites
 
@@ -42,6 +42,6 @@ For each prompt, record the real model, response time, selected SKUs/quantities 
 - [ ] An expired or revoked request cannot start capture. An in-flight payment remains explicitly uncertain until verified.
 - [ ] Desktop and 390 px layouts have readable totals/statuses, usable controls, and no horizontal page overflow.
 - [ ] Keyboard navigation reaches every action; drawer traps focus, Escape closes it, and reduced motion is respected.
-- [ ] Clean `npm ci`, `npm test`, `npm run build`, `npm start` setup succeeds from a fresh checkout.
+- [x] Automated clean setup: `npm ci`, `npm test`, `npm run build`, seed and production server/login/policy checks passed in an isolated source copy using `npm run verify:fresh`.
 
 Automated tests cover injected lost/pending/declined responses, tampering, concurrency and restart recovery. They do not replace the live provider or browser checks above.

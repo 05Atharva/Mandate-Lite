@@ -29,4 +29,14 @@ Verified in the built-in browser against the local development server, using an 
 
 Local screenshots are saved in `.local/qa/overview-desktop.jpg` and `.local/qa/overview-mobile.jpg`; runtime data and screenshots are intentionally untracked.
 
-Live model planning, actual PayPal buyer consent/capture/cancel, real pending-payment behavior and the complete fresh-checkout setup gate remain pending. See [the integration checklist](INTEGRATION_CHECKLIST.md). This browser run establishes UI and manual policy behavior, not live payment or model integration success.
+Live model planning, actual PayPal buyer consent/capture/cancel and real pending-payment behavior remain pending. See [the integration checklist](INTEGRATION_CHECKLIST.md). This browser run establishes UI and manual policy behavior, not live payment or model integration success. Fresh-setup verification was completed in the follow-up below.
+
+## Follow-up verification after completing the code gaps
+
+- Persisted owner sign-in succeeded against the existing isolated QA ledger; expired requests retained their history and released their reservations.
+- AG Grid Community rendered without captured console errors/warnings. Entering “Espresso” into its Purchase column filter left the single matching request visible.
+- At 390 px the advanced grid correctly switched back to four mobile request cards, with no horizontal page overflow.
+- The separate `/replay` view rendered on desktop and 390 px mobile, with a visible fixture-only banner, fictional references and no approve/capture controls. Selecting the blocked fixture showed its no-payment explanation.
+- A browser download permission gate declined the filtered CSV download. The browser file-download step is therefore **unverified**; no alternate download path was attempted. CSV neutralization is covered by the automated test.
+- Follow-up screenshots: `.local/qa/advanced-audit.jpg`, `.local/qa/replay-desktop.jpg`, `.local/qa/replay-mobile.jpg`.
+- The isolated fresh-setup command passed installation, 34 tests, build, seed, production HTTP, owner login and manual policy submission. The report is `.local/fresh-setup-report.json`. No live provider calls were made.
