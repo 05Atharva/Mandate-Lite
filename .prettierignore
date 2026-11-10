@@ -1,0 +1,6 @@
+node_modules
+dist
+data
+.local
+package-lock.json
+PayPal-Hackathon-Mandate-Lite-PRD.md
