@@ -29,6 +29,7 @@ This separates code coverage from account-dependent acceptance. **Full PRD accep
 ## Local delivery and checks
 
 - Node version, lockfile, seed/migration, environment template, build/start instructions and MIT license are included.
+- Development serving blocks ledger/database files, `.local`, environment/secrets and server/test/script source paths; runtime/QA directories are excluded from file watching. HTTP tests cover both ordinary and `@fs` database URLs.
 - Desktop/mobile browser QA is recorded in [VISUAL_QA.md](VISUAL_QA.md).
 - `npm run verify:fresh` creates an isolated source copy, runs `npm ci`, tests, build and seed, then verifies production HTTP, owner login and a manual policy request without external payment/model calls.
 - `npm run benchmark` measures full local intent transactions, including reservations and lazy expiry. Measurement is machine-specific.
