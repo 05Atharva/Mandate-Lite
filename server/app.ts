@@ -1,7 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { digest, sameHash, Identities } from './identity.js';
 import { z, ZodError } from 'zod';
 import { AppError, ensure } from './errors.js';
 import { PurchasingService } from './service.js';
@@ -17,9 +18,6 @@ export interface AppConfig {
   openaiKey: string;
   model: string;
 }
-const digest = (s: string) => createHash('sha256').update(s).digest('hex');
-const constantEqual = (a: string, b: string) =>
-  timingSafeEqual(Buffer.from(digest(a), 'hex'), Buffer.from(digest(b), 'hex'));
 type ActorRequest = Request & {
   actor?: 'owner' | 'agent';
   sessionHash?: string;
@@ -29,10 +27,7 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
   const app = express();
   const service = new PurchasingService(store, provider);
   const planner = new Planner(store, config.openaiKey, config.model);
-  const passwordSalt = randomBytes(32);
-  const passwordHash = config.ownerPassword
-    ? scryptSync(config.ownerPassword, passwordSalt, 64)
-    : null;
+  const identities = new Identities(store, config.ownerPassword, config.agentKey);
   app.disable('x-powered-by');
   app.use(
     helmet({
@@ -74,13 +69,15 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
     if (cookie) {
       const tokenHash = digest(cookie);
       const session = store.db
-        .prepare('SELECT * FROM sessions WHERE token_hash=? AND expires_at>?')
+        .prepare(
+          'SELECT sessions.* FROM sessions JOIN owners ON owners.id=sessions.owner_id WHERE token_hash=? AND expires_at>? AND owners.active=1 AND sessions.credential_version=owners.credential_version',
+        )
         .get(tokenHash, new Date().toISOString());
       if (session) {
         if (!['GET', 'HEAD'].includes(req.method))
           ensure(
             req.headers.origin === config.appUrl &&
-              constantEqual(
+              sameHash(
                 digest(String(req.headers['x-csrf-token'] ?? '')),
                 String(session.csrf_hash),
               ),
@@ -95,7 +92,7 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       }
     }
     const key = req.headers.authorization?.replace(/^Bearer /, '') ?? '';
-    if (config.agentKey && key && constantEqual(key, config.agentKey)) {
+    if (identities.authenticateAgent(key)) {
       req.actor = 'agent';
       return next();
     }
@@ -118,8 +115,8 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
     res.json({
       ok: true,
       mode: 'sandbox',
-      ownerConfigured: Boolean(passwordHash),
-      agentConfigured: Boolean(config.agentKey),
+      ownerConfigured: Boolean(identities.owner().password_hash),
+      agentConfigured: Boolean(identities.agent().key_hash && identities.agent().active),
       paypalConfigured: provider.configured,
       plannerConfigured: planner.configured,
       model: planner.model,
@@ -142,13 +139,13 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       );
       const value = z.strictObject({ password: z.string().min(1).max(1024) }).parse(req.body);
       ensure(
-        passwordHash,
+        identities.owner().password_hash,
         503,
         'OWNER_NOT_CONFIGURED',
         'Set OWNER_PASSWORD in .env and restart the server.',
       );
       ensure(
-        timingSafeEqual(scryptSync(value.password, passwordSalt, 64), passwordHash),
+        identities.verifyOwner(value.password),
         401,
         'LOGIN_FAILED',
         'The owner password is incorrect.',
@@ -157,8 +154,16 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       const csrfToken = digest(`csrf:${token}`);
       store.db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(new Date().toISOString());
       store.db
-        .prepare('INSERT INTO sessions VALUES(?,?,?)')
-        .run(digest(token), digest(csrfToken), new Date(Date.now() + 8 * 3600000).toISOString());
+        .prepare(
+          'INSERT INTO sessions(token_hash,csrf_hash,expires_at,owner_id,credential_version) VALUES(?,?,?,?,?)',
+        )
+        .run(
+          digest(token),
+          digest(csrfToken),
+          new Date(Date.now() + 8 * 3600000).toISOString(),
+          'owner',
+          identities.owner().credential_version,
+        );
       res.cookie('mandate_session', token, {
         httpOnly: true,
         secure: config.secureCookie,
@@ -177,6 +182,18 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
     store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(req.sessionHash!);
     res.clearCookie('mandate_session', { path: '/' });
     res.json({ ok: true });
+  });
+  app.get('/api/agent', owner, (_req, res) =>
+    res.json({
+      id: 'studio-agent',
+      workspaceId: 'studio',
+      active: Boolean(identities.agent().active),
+      configured: Boolean(identities.agent().key_hash),
+    }),
+  );
+  app.post('/api/agent/revoke', owner, (_req, res) => {
+    identities.revokeAgent();
+    res.json({ id: 'studio-agent', active: false });
   });
   app.get('/api/catalog', (_req, res) => res.json(store.products()));
   app.get('/api/mandate', (_req, res) => {
@@ -223,12 +240,45 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       .parse(req.body);
     res.json(service.decide(String(req.params.id), value.decision, value.basketHash));
   });
-  app.post('/api/intents/:id/checkout', owner, async (req, res) => {
+  app.post('/api/intents/:id/checkout', owner, async (req: ActorRequest, res) => {
     z.strictObject({}).parse(req.body);
-    res.json(await service.checkout(String(req.params.id)));
+    const purchase = await service.checkout(String(req.params.id));
+    if (purchase.orderId && purchase.state === 'CHECKOUT')
+      store.db
+        .prepare(
+          'INSERT INTO checkout_sessions VALUES(?,?,?) ON CONFLICT(request_id,session_hash) DO UPDATE SET expires_at=excluded.expires_at',
+        )
+        .run(purchase.id, req.sessionHash!, purchase.expiresAt);
+    res.json(purchase);
   });
-  app.post('/api/intents/:id/capture', owner, async (req, res) => {
+  function requireCheckoutSession(req: ActorRequest, orderId: string) {
+    const purchase = service.require(String(req.params.id));
+    ensure(
+      purchase.orderId === orderId,
+      409,
+      'ORDER_MISMATCH',
+      'The callback order does not match the saved purchase.',
+    );
+    ensure(
+      store.db
+        .prepare('SELECT request_id FROM checkout_sessions WHERE request_id=? AND session_hash=?')
+        .get(purchase.id, req.sessionHash!),
+      403,
+      'CHECKOUT_SESSION',
+      'Open PayPal checkout in this owner session before capturing or accepting its return.',
+    );
+    return purchase;
+  }
+  app.get('/api/intents/:id/checkout-return', owner, (req: ActorRequest, res) => {
+    const query = z
+      .strictObject({ orderId: z.string().min(1).max(100), outcome: z.enum(['approve', 'cancel']) })
+      .parse(req.query);
+    const purchase = requireCheckoutSession(req, query.orderId);
+    res.json({ purchase, outcome: query.outcome });
+  });
+  app.post('/api/intents/:id/capture', owner, async (req: ActorRequest, res) => {
     const { orderId } = z.strictObject({ orderId: z.string().min(1).max(100) }).parse(req.body);
+    requireCheckoutSession(req, orderId);
     res.json(await service.capture(String(req.params.id), orderId));
   });
   app.post('/api/intents/:id/reconcile', owner, async (req, res) => {
@@ -265,14 +315,12 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
     service,
     errors: (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
       if (error instanceof ZodError) {
-        res
-          .status(400)
-          .json({
-            code: 'VALIDATION',
-            message: error.issues
-              .map((i) => `${i.path.join('.') || 'input'}: ${i.message}`)
-              .join('; '),
-          });
+        res.status(400).json({
+          code: 'VALIDATION',
+          message: error.issues
+            .map((i) => `${i.path.join('.') || 'input'}: ${i.message}`)
+            .join('; '),
+        });
         return;
       }
       if (error instanceof AppError) {
@@ -283,12 +331,10 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
         res.status(400).json({ code: 'JSON', message: 'Invalid JSON request body.' });
         return;
       }
-      res
-        .status(500)
-        .json({
-          code: 'INTERNAL',
-          message: 'The operation could not be completed. Refresh the request before retrying.',
-        });
+      res.status(500).json({
+        code: 'INTERNAL',
+        message: 'The operation could not be completed. Refresh the request before retrying.',
+      });
     },
   };
 }

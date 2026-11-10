@@ -83,6 +83,53 @@ test('HTTP enforces session, CSRF, owner/agent separation and saved-order bindin
     );
     const checkout = await call(`/intents/${p.id}/checkout`, {}, owner);
     const ready = (await checkout.json()) as Purchase;
+    assert.equal(
+      (
+        await call(
+          `/intents/${p.id}/checkout-return?orderId=${encodeURIComponent(ready.orderId!)}&outcome=approve`,
+          undefined,
+          owner,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await call(
+          `/intents/${p.id}/checkout-return?orderId=OTHER&outcome=approve`,
+          undefined,
+          owner,
+        )
+      ).status,
+      409,
+    );
+    const secondLogin = await call(
+      '/session',
+      { password: 'owner-test-password' },
+      { Origin: config.appUrl },
+    );
+    const secondOwner = {
+      Cookie: secondLogin.headers.get('set-cookie')!.split(';')[0],
+      Origin: config.appUrl,
+      'X-CSRF-Token': ((await secondLogin.json()) as { csrfToken: string }).csrfToken,
+    };
+    assert.equal(
+      (await call(`/intents/${p.id}/capture`, { orderId: ready.orderId }, secondOwner)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await call(
+          `/intents/${p.id}/checkout-return?orderId=${encodeURIComponent(ready.orderId!)}&outcome=approve`,
+          undefined,
+          secondOwner,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(provider.captureCalls.length, 0);
+    await call(`/intents/${p.id}/checkout`, {}, secondOwner);
+    assert.equal(provider.createCalls.length, 1);
     provider.approve(ready.orderId!);
     assert.equal(
       (await call(`/intents/${p.id}/capture`, { orderId: 'TAMPERED' }, owner)).status,
@@ -99,6 +146,9 @@ test('HTTP enforces session, CSRF, owner/agent separation and saved-order bindin
     assert.ok(!audit.includes(csrfToken));
     assert.equal((await call('/not-a-route', undefined, owner)).status, 404);
     assert.equal((await call('/plans', { need: 'Six new starters' }, agent)).status, 503);
+    assert.equal((await call('/agent/revoke', {}, agent)).status, 403);
+    assert.equal((await call('/agent/revoke', {}, owner)).status, 200);
+    assert.equal((await call('/catalog', undefined, agent)).status, 401);
     assert.equal((await call('/session', undefined, owner, 'DELETE')).status, 200);
     assert.equal((await call('/dashboard', undefined, owner)).status, 401);
   } finally {

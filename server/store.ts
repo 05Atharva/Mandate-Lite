@@ -10,9 +10,15 @@ export class Store {
   constructor(path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+    this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
       INSERT OR IGNORE INTO schema_version VALUES(1);
+      CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, demo INTEGER NOT NULL CHECK(demo IN (0,1)));
+      CREATE TABLE IF NOT EXISTS owners (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), password_hash TEXT, password_salt TEXT, active INTEGER NOT NULL, credential_version INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), key_hash TEXT, active INTEGER NOT NULL);
+      INSERT OR IGNORE INTO workspaces VALUES('studio',1);
+      INSERT OR IGNORE INTO owners(id,workspace_id,active) VALUES('owner','studio',1);
+      INSERT OR IGNORE INTO agents VALUES('studio-agent','studio',NULL,0);
       CREATE TABLE IF NOT EXISTS catalog (sku TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS mandate (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS purchases (id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, request_key TEXT NOT NULL, body_hash TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(agent_id, request_key));
@@ -21,7 +27,17 @@ export class Store {
       CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT REFERENCES purchases(id), actor TEXT NOT NULL, type TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, csrf_hash TEXT NOT NULL, expires_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS owner_decisions (request_id TEXT PRIMARY KEY REFERENCES purchases(id), owner_id TEXT NOT NULL REFERENCES owners(id), decision TEXT NOT NULL CHECK(decision IN ('approve','reject')), basket_hash TEXT NOT NULL, amount INTEGER NOT NULL, mandate_version INTEGER NOT NULL, expires_at TEXT NOT NULL, decided_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS checkout_sessions (request_id TEXT NOT NULL REFERENCES purchases(id), session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE, expires_at TEXT NOT NULL, PRIMARY KEY(request_id,session_hash));
     `);
+    const sessionColumns = this.db.prepare('PRAGMA table_info(sessions)').all();
+    if (!sessionColumns.some((c) => c.name === 'owner_id'))
+      this.db.exec('ALTER TABLE sessions ADD COLUMN owner_id TEXT REFERENCES owners(id)');
+    if (!sessionColumns.some((c) => c.name === 'credential_version'))
+      this.db.exec('ALTER TABLE sessions ADD COLUMN credential_version INTEGER NOT NULL DEFAULT 1');
+    this.db.exec(
+      "UPDATE sessions SET owner_id='owner' WHERE owner_id IS NULL; INSERT OR IGNORE INTO schema_version VALUES(2);",
+    );
     const seed = this.db.prepare('INSERT OR IGNORE INTO catalog(sku,data) VALUES(?,?)');
     this.tx(() => {
       for (const item of catalog) seed.run(item.sku, JSON.stringify(item));

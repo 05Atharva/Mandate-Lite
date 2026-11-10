@@ -262,12 +262,34 @@ export function App() {
     callbackHandled.current = true;
     const params = new URLSearchParams(location.search);
     const id = params.get('request');
-    if (id) setSelectedId(id);
-    setToast(
-      location.pathname.endsWith('/cancel')
-        ? 'Buyer returned from cancellation. Close the request below to release the reservation.'
-        : 'Buyer returned from PayPal. Verify and capture below; returning alone is not payment confirmation.',
-    );
+    const orderId = params.get('token');
+    const outcome = location.pathname.endsWith('/cancel') ? 'cancel' : 'approve';
+    if (!id || !orderId) {
+      setError(
+        'The PayPal return is missing its request or order reference. Open the saved request from your workspace.',
+      );
+      return;
+    }
+    api<{ purchase: Purchase }>(
+      `/intents/${encodeURIComponent(id)}/checkout-return?orderId=${encodeURIComponent(orderId)}&outcome=${outcome}`,
+    )
+      .then(({ purchase }) => {
+        setData((current) =>
+          current
+            ? {
+                ...current,
+                purchases: [purchase, ...current.purchases.filter((p) => p.id !== purchase.id)],
+              }
+            : current,
+        );
+        setSelectedId(purchase.id);
+        setToast(
+          outcome === 'cancel'
+            ? 'Buyer returned from cancellation. Close the request below to release the reservation.'
+            : 'PayPal return matches this session and saved order. Verify and capture below; returning alone is not payment confirmation.',
+        );
+      })
+      .catch((e) => setError(e.message));
   }, [loggedIn]);
   async function act(task: () => Promise<unknown>, message?: string) {
     setBusy(true);
@@ -1694,10 +1716,20 @@ function PurchaseDrawer({
                       Verify &amp; capture {money(p.amountCents)}
                     </button>
                     {p.checkoutUrl && (
-                      <a className="secondary button-link" href={p.checkoutUrl}>
-                        Open PayPal
+                      <button
+                        disabled={busy}
+                        className="secondary"
+                        onClick={() =>
+                          act(async () => {
+                            const next = await api<Purchase>(`/intents/${id}/checkout`, {});
+                            if (next.state === 'CHECKOUT' && next.checkoutUrl)
+                              window.location.assign(next.checkoutUrl);
+                          })
+                        }
+                      >
+                        Resume PayPal checkout
                         <ExternalLink size={15} />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </>

@@ -196,6 +196,18 @@ export class PurchasingService {
         p.state = 'REJECTED';
         this.store.release(id);
       }
+      this.store.db
+        .prepare('INSERT INTO owner_decisions VALUES(?,?,?,?,?,?,?,?)')
+        .run(
+          p.id,
+          'owner',
+          decision,
+          p.basketHash,
+          p.amountCents,
+          p.mandateVersion,
+          p.expiresAt,
+          new Date().toISOString(),
+        );
       this.store.save(p);
       this.store.event(id, 'owner', decision === 'approve' ? 'OWNER_APPROVED' : 'OWNER_REJECTED', {
         basketHash,
