@@ -67,6 +67,7 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
   app.post('/api/intents/:id/cancel', owner, (req, res) => { z.strictObject({}).parse(req.body); res.json(service.cancel(String(req.params.id))); });
   app.get('/api/dashboard', owner, (_req, res) => { store.expire(); res.json({ mandate: store.mandate(), budget: store.budget(), purchases: store.list(), audit: store.events() }); });
   app.get('/api/audit', owner, (_req, res) => { store.expire(); res.json({ events: store.events(), purchases: store.list(), mandate: store.mandate(), budget: store.budget() }); });
+  app.use('/api', (_req, res) => res.status(404).json({ code: 'NOT_FOUND', message: 'API endpoint not found.' }));
   return { app, service, errors: (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof ZodError) { res.status(400).json({ code: 'VALIDATION', message: error.issues.map(i => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ') }); return; }
     if (error instanceof AppError) { res.status(error.status).json({ code: error.code, message: error.message }); return; }
