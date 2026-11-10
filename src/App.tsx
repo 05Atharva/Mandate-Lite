@@ -71,6 +71,7 @@ type Health = {
   paypalConfigured: boolean;
   plannerConfigured: boolean;
   model: string;
+  plannerProvider: string;
 };
 type View = 'overview' | 'purchase' | 'mandate';
 function Badge({ state }: { state: PurchaseState }) {
@@ -860,6 +861,7 @@ function PurchaseDesk({
 }) {
   const [need, setNeed] = useState('');
   const [plan, setPlan] = useState<PlanRecord | null>(null);
+  const [clarification, setClarification] = useState<PlanRecord | null>(null);
   const [items, setItems] = useState<Selection[]>([]);
   const [planning, setPlanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -870,8 +872,13 @@ function PurchaseDesk({
     setPlanning(true);
     onError('');
     try {
-      const record = await api<PlanRecord>('/plans', { need });
+      const record = await api<PlanRecord>('/plans', {
+        need,
+        ...(clarification ? { previousPlanId: clarification.id } : {}),
+      });
       setPlan(record);
+      setClarification(record.output.kind === 'clarification' ? record : null);
+      if (record.output.kind === 'clarification') setNeed('');
       setItems(record.output.kind === 'basket' ? record.output.items : []);
     } catch (e) {
       onError((e as Error).message);
@@ -881,6 +888,7 @@ function PurchaseDesk({
   }
   function changeItem(sku: string, quantity: number) {
     setPlan(null);
+    setClarification(null);
     setItems((current) => [
       ...current.filter((i) => i.sku !== sku),
       ...(quantity > 0 ? [{ sku, quantity }] : []),
@@ -891,7 +899,7 @@ function PurchaseDesk({
     onError('');
     const body = {
       title: (plan?.output.kind === 'basket'
-        ? plan.output.summary
+        ? plan.output.userSummary
         : need || 'Manual catalog purchase'
       ).slice(0, 160),
       currency: 'USD',
@@ -908,6 +916,7 @@ function PurchaseDesk({
       onSubmitted(p);
       setItems([]);
       setPlan(null);
+      setClarification(null);
       setNeed('');
       keyRef.current = null;
     } catch (e) {
@@ -938,13 +947,17 @@ function PurchaseDesk({
             <textarea
               id="need"
               maxLength={2000}
-              minLength={5}
+              minLength={1}
               rows={6}
-              placeholder="We have six new starters. Pick reusable desk supplies under $80; avoid electrical items."
+              placeholder={
+                clarification
+                  ? 'Answer the planner’s question…'
+                  : 'We have six new starters. Pick reusable desk supplies under $80; avoid electrical items.'
+              }
               value={need}
               onChange={(e) => {
                 setNeed(e.target.value);
-                setPlan(null);
+                setPlan((current) => (current?.output.kind === 'clarification' ? current : null));
               }}
               required
             />
@@ -964,6 +977,7 @@ function PurchaseDesk({
                   onClick={() => {
                     setNeed(p.text);
                     setPlan(null);
+                    setClarification(null);
                   }}
                 >
                   {p.label}
@@ -981,11 +995,28 @@ function PurchaseDesk({
             )}
             <button
               className="primary"
-              disabled={planning || !health?.plannerConfigured || need.trim().length < 5}
+              disabled={planning || !health?.plannerConfigured || !need.trim()}
             >
               <Sparkles size={16} />
-              {planning ? 'Preparing your basket…' : 'Plan a basket'}
+              {planning
+                ? 'Preparing your basket…'
+                : clarification
+                  ? 'Answer & plan'
+                  : 'Plan a basket'}
             </button>
+            {clarification && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setClarification(null);
+                  setPlan(null);
+                  setNeed('');
+                }}
+              >
+                Start a new need
+              </button>
+            )}
           </form>
           {plan && (
             <div
@@ -996,7 +1027,16 @@ function PurchaseDesk({
                   ? 'A DETAIL TO CLARIFY'
                   : 'PLANNER SUGGESTION'}
               </span>
-              <p>{plan.output.kind === 'basket' ? plan.output.summary : plan.output.question}</p>
+              <p>
+                {plan.output.kind === 'basket' ? plan.output.userSummary : plan.output.question}
+              </p>
+              {plan.output.kind === 'basket' && (
+                <ul className="preference-evidence">
+                  {plan.output.preferenceEvidence.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              )}
               <small>
                 {plan.provider} · {plan.model} · {plan.templateVersion}
               </small>

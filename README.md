@@ -52,7 +52,9 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 | `AGENT_API_KEY`                            | Agent bearer credential; proposal/planning access only                     |
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox seller REST application credentials                                |
 | `PAYPAL_MERCHANT_ID`                       | Expected seller merchant/account ID; verified before capture               |
-| `OPENAI_API_KEY`                           | Server-side Responses API credential                                       |
+| `OPENAI_API_KEY`                           | OpenAI credential when `LLM_PROVIDER=openai`                               |
+| `GROQ_API_KEY`                             | Groq credential when `LLM_PROVIDER=groq`                                   |
+| `LLM_PROVIDER`, `LLM_MODEL`                | Provider and optional explicit model override                              |
 | `OPENAI_MODEL`                             | Structured-output-capable model; defaults to `gpt-4.1-mini`                |
 | `APP_URL`                                  | Exact public origin, without a path; local default `http://localhost:3000` |
 | `DATABASE_PATH`                            | Persistent SQLite path, default `./data/mandate.sqlite`                    |
@@ -71,6 +73,20 @@ Agent clients send `Authorization: Bearer <AGENT_API_KEY>`. `POST /api/intents` 
 ```
 
 `POST /api/plans` accepts `{ "need": "..." }`. To preserve AI provenance, submit its saved `planId` with the matching items. Modified selections must be submitted as manual. Agents cannot activate/revoke a mandate, approve, create checkout, capture, reconcile or read the owner audit.
+
+For Groq, set these values in `.env`, keeping the key local:
+
+```dotenv
+LLM_PROVIDER=groq
+GROQ_API_KEY=your-local-key
+LLM_MODEL=openai/gpt-oss-20b
+```
+
+Groq uses its documented OpenAI-compatible Responses endpoint with strict Structured Outputs. OpenAI remains available by setting `LLM_PROVIDER=openai`. Each provider uses only its own credential; no automatic fallback sends requests to another provider. See [Groq Responses](https://console.groq.com/docs/responses-api) and [supported strict-output models](https://console.groq.com/docs/structured-outputs).
+
+Planner baskets contain `userSummary`, `preferenceEvidence`, and catalog `items`. When a plan asks a clarification, send the answer as `need` with its `previousPlanId`; the server retains the original need/question, scopes it to the authenticated agent and bounds context to four clarification turns. The UI handles this exchange and can start a fresh need. Preference evidence is a public constraint-to-product explanation, not a private reasoning trace.
+
+Owner/agent identities and hashed credentials are persisted in SQLite. Reusing the same configuration preserves sessions and revocations; configuring a different owner password invalidates old sessions. `POST /api/agent/revoke` disables agent access durably. To rotate and reactivate an agent, configure a different agent key and restart. Checkout returns and captures require the owner session that opened or explicitly resumed the saved order.
 
 ## Architecture and validation
 

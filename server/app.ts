@@ -17,6 +17,8 @@ export interface AppConfig {
   secureCookie: boolean;
   openaiKey: string;
   model: string;
+  modelProvider?: 'openai' | 'groq';
+  groqKey?: string;
 }
 type ActorRequest = Request & {
   actor?: 'owner' | 'agent';
@@ -26,7 +28,12 @@ type ActorRequest = Request & {
 export function createApp(store: Store, provider: PaymentProvider, config: AppConfig) {
   const app = express();
   const service = new PurchasingService(store, provider);
-  const planner = new Planner(store, config.openaiKey, config.model);
+  const planner = new Planner(
+    store,
+    config.modelProvider === 'groq' ? (config.groqKey ?? '') : config.openaiKey,
+    config.model,
+    config.modelProvider,
+  );
   const identities = new Identities(store, config.ownerPassword, config.agentKey);
   app.disable('x-powered-by');
   app.use(
@@ -120,6 +127,7 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
       paypalConfigured: provider.configured,
       plannerConfigured: planner.configured,
       model: planner.model,
+      plannerProvider: planner.provider === 'groq' ? 'Groq' : 'OpenAI',
     }),
   );
   app.post(
@@ -212,8 +220,13 @@ export function createApp(store: Store, provider: PaymentProvider, config: AppCo
     legacyHeaders: false,
   });
   app.post('/api/plans', modelLimit, async (req, res) => {
-    const { need } = z.strictObject({ need: z.string().trim().min(5).max(2000) }).parse(req.body);
-    res.json(await planner.plan(need, 'studio-agent'));
+    const { need, previousPlanId } = z
+      .strictObject({
+        need: z.string().trim().min(1).max(2000),
+        previousPlanId: z.string().uuid().optional(),
+      })
+      .parse(req.body);
+    res.json(await planner.plan(need, 'studio-agent', previousPlanId));
   });
   app.post('/api/intents', (req, res) =>
     res

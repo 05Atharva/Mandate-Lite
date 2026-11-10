@@ -91,7 +91,7 @@ export interface AuditEvent {
   at: string;
 }
 export type Plan =
-  | { kind: 'basket'; summary: string; items: Selection[] }
+  | { kind: 'basket'; userSummary: string; preferenceEvidence: string[]; items: Selection[] }
   | { kind: 'clarification'; question: string };
 export interface PlanRecord {
   id: string;
@@ -100,6 +100,9 @@ export interface PlanRecord {
   model: string;
   templateVersion: string;
   createdAt: string;
+  need: string;
+  previousPlanId: string | null;
+  context: { need: string; question: string }[];
 }
 export interface Dashboard {
   mandate: Mandate | null;

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Planner } from '../server/planner.js';
 import { Store } from '../server/store.js';
+import { modelConfig } from '../server/model-config.js';
 
 const modelResponse = (result: unknown) =>
   new Response(
@@ -9,7 +10,26 @@ const modelResponse = (result: unknown) =>
       status: 'completed',
       model: 'actual-provider-model',
       output: [
-        { type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ result }) }] },
+        {
+          type: 'message',
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                result:
+                  typeof result === 'object' &&
+                  result !== null &&
+                  'kind' in result &&
+                  result.kind === 'basket'
+                    ? {
+                        preferenceEvidence: ['Selection matches the requested catalog items.'],
+                        ...result,
+                      }
+                    : result,
+              }),
+            },
+          ],
+        },
       ],
     }),
     { status: 200 },
@@ -27,7 +47,7 @@ test('real planner adapter sends bounded schema and persists validated provenanc
     assert.equal(JSON.parse(body.input).catalog.length, 14);
     return modelResponse({
       kind: 'basket',
-      summary: 'Six refillable pen sets for new starters.',
+      userSummary: 'Six refillable pen sets for new starters.',
       items: [{ sku: 'PEN-01', quantity: 6 }],
     });
   });
@@ -65,17 +85,17 @@ test('planner rejects unknown SKUs, extra authority, invalid quantities and merg
   t.mock.method(globalThis, 'fetch', async () => modelResponse(output));
   try {
     for (const value of [
-      { kind: 'basket', summary: 'Unknown', items: [{ sku: 'INVENTED', quantity: 1 }] },
+      { kind: 'basket', userSummary: 'Unknown', items: [{ sku: 'INVENTED', quantity: 1 }] },
       {
         kind: 'basket',
-        summary: 'Extra authority',
+        userSummary: 'Extra authority',
         items: [{ sku: 'PEN-01', quantity: 1 }],
         approved: true,
       },
-      { kind: 'basket', summary: 'Fractional', items: [{ sku: 'PEN-01', quantity: 1.5 }] },
+      { kind: 'basket', userSummary: 'Fractional', items: [{ sku: 'PEN-01', quantity: 1.5 }] },
       {
         kind: 'basket',
-        summary: 'Too many merged',
+        userSummary: 'Too many merged',
         items: [
           { sku: 'PEN-01', quantity: 11 },
           { sku: 'PEN-01', quantity: 10 },
@@ -98,7 +118,7 @@ test('planner retries transient failure once before any purchase action', async 
     if (calls === 1) throw new Error('Simulated timeout');
     return modelResponse({
       kind: 'basket',
-      summary: 'Coffee',
+      userSummary: 'Coffee',
       items: [{ sku: 'COFFEE-01', quantity: 1 }],
     });
   });
@@ -135,7 +155,7 @@ test('manual changes cannot retain model provenance', async (t) => {
   t.mock.method(globalThis, 'fetch', async () =>
     modelResponse({
       kind: 'basket',
-      summary: 'Coffee',
+      userSummary: 'Coffee',
       items: [{ sku: 'COFFEE-01', quantity: 1 }],
     }),
   );
@@ -162,4 +182,103 @@ test('manual changes cannot retain model provenance', async (t) => {
   } finally {
     store.close();
   }
+});
+
+test('Groq uses its own endpoint/key, persists actual provenance, and excludes reasoning traces', async (t) => {
+  const store = new Store(':memory:');
+  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    assert.equal(url, 'https://api.groq.com/openai/v1/responses');
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer groq-test-key');
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.model, 'openai/gpt-oss-20b');
+    assert.equal(body.text.format.strict, true);
+    assert.equal(body.max_output_tokens, 2048);
+    const response = await modelResponse({
+      kind: 'basket',
+      userSummary: 'Coffee restock',
+      items: [{ sku: 'COFFEE-01', quantity: 1 }],
+    }).json();
+    response.output.unshift({
+      type: 'reasoning',
+      content: [{ type: 'reasoning_text', text: 'PRIVATE-TRACE-MUST-NOT-PERSIST' }],
+    });
+    return new Response(JSON.stringify(response));
+  });
+  try {
+    const plan = await new Planner(store, 'groq-test-key', 'openai/gpt-oss-20b', 'groq').plan(
+      'One coffee restock',
+      'studio-agent',
+    );
+    assert.equal(plan.provider, 'Groq');
+    assert.equal(plan.model, 'actual-provider-model');
+    assert.equal(plan.templateVersion, 'catalog-planner-v2');
+    assert.ok(!JSON.stringify(store.events()).includes('PRIVATE-TRACE'));
+    assert.ok(
+      !String(store.db.prepare('SELECT data FROM plans').get()!.data).includes('groq-test-key'),
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('clarification answers retain the original need and are scoped to the authenticated agent', async (t) => {
+  const store = new Store(':memory:');
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    calls++;
+    const input = JSON.parse(JSON.parse(String(init.body)).input);
+    if (calls === 1)
+      return modelResponse({ kind: 'clarification', question: 'How many new starters?' });
+    assert.equal(input.need, '6');
+    assert.deepEqual(input.clarificationContext, [
+      { need: 'Reusable pens for new starters under $80', question: 'How many new starters?' },
+    ]);
+    return modelResponse({
+      kind: 'basket',
+      userSummary: 'Six pen sets',
+      preferenceEvidence: ['Six reusable pen sets cost $42, below $80.'],
+      items: [
+        { sku: 'PEN-01', quantity: 2 },
+        { sku: 'PEN-01', quantity: 4 },
+      ],
+    });
+  });
+  try {
+    const planner = new Planner(store, 'test-key', 'model');
+    const first = await planner.plan('Reusable pens for new starters under $80', 'studio-agent');
+    await assert.rejects(planner.plan('6', 'other-agent', first.id), /not found/);
+    const next = await planner.plan('6', 'studio-agent', first.id);
+    assert.equal(next.previousPlanId, first.id);
+    assert.equal(next.context.length, 1);
+    assert.equal(next.output.kind, 'basket');
+    if (next.output.kind === 'basket')
+      assert.deepEqual(next.output.items, [{ sku: 'PEN-01', quantity: 6 }]);
+    await assert.rejects(
+      planner.plan('Change it', 'studio-agent', next.id),
+      /Only a clarification/,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('provider configuration never sends one provider key to another endpoint', () => {
+  assert.deepEqual(
+    modelConfig({
+      LLM_PROVIDER: 'groq',
+      GROQ_API_KEY: 'groq-secret',
+      OPENAI_API_KEY: 'openai-secret',
+    }),
+    { provider: 'groq', apiKey: 'groq-secret', model: 'openai/gpt-oss-20b' },
+  );
+  assert.equal(modelConfig({ LLM_PROVIDER: 'groq', OPENAI_API_KEY: 'openai-secret' }).apiKey, '');
+  assert.equal(
+    modelConfig({ OPENAI_API_KEY: 'openai-secret', GROQ_API_KEY: 'groq-secret' }).apiKey,
+    'openai-secret',
+  );
+  assert.equal(
+    modelConfig({ LLM_PROVIDER: 'groq', LLM_MODEL: 'chosen-model' }).model,
+    'chosen-model',
+  );
+  assert.throws(() => modelConfig({ LLM_PROVIDER: 'unrecognized' }), /must be openai or groq/);
 });

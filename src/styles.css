@@ -1205,6 +1205,15 @@ main {
   color: #536179;
   overflow-wrap: anywhere;
 }
+.preference-evidence {
+  padding-left: 18px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.preference-evidence li {
+  margin: 6px 0;
+}
 .basket-panel {
   padding-bottom: 22px;
 }

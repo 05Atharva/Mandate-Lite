@@ -5,6 +5,7 @@ import express from 'express';
 import { Store } from './store.js';
 import { PayPal } from './paypal.js';
 import { createApp } from './app.js';
+import { modelConfig } from './model-config.js';
 
 if (existsSync('.env')) loadEnvFile('.env');
 const port = Number(process.env.PORT || 3000);
@@ -23,13 +24,16 @@ const provider = new PayPal(
   process.env.PAYPAL_MERCHANT_ID || '',
   appUrl,
 );
+const llm = modelConfig(process.env);
 const { app, errors } = createApp(store, provider, {
   appUrl,
   ownerPassword: process.env.OWNER_PASSWORD || '',
   agentKey: process.env.AGENT_API_KEY || '',
   secureCookie,
-  openaiKey: process.env.OPENAI_API_KEY || '',
-  model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  openaiKey: llm.provider === 'openai' ? llm.apiKey : '',
+  groqKey: llm.provider === 'groq' ? llm.apiKey : '',
+  modelProvider: llm.provider,
+  model: llm.model,
 });
 if (process.env.NODE_ENV !== 'production' && !process.argv[1].endsWith('.js')) {
   const { createServer } = await import('vite');
