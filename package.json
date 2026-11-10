@@ -8,14 +8,19 @@
   },
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "build": "tsc --noEmit && node scripts/licenses.mjs && vite build && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist/server/server/index.js",
     "test": "tsx --test tests/*.test.ts",
     "check": "tsc --noEmit",
-    "format": "prettier --write src server shared tests *.json *.ts index.html README.md",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "evaluate:model": "tsx scripts/evaluate-model.ts",
+    "verify:fresh": "node scripts/fresh-setup.mjs",
+    "format": "prettier --write src server shared tests scripts docs *.json *.ts index.html README.md",
     "db:seed": "tsx server/seed.ts"
   },
   "dependencies": {
+    "ag-grid-community": "^36.3.0",
+    "ag-grid-react": "^36.3.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",

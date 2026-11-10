@@ -1,0 +1,135 @@
+.replay-page {
+  max-width: 1160px;
+  margin: auto;
+  padding: 28px 24px;
+}
+.replay-banner {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 18px 22px;
+  margin: 14px 0 32px;
+  background: #fff6e7;
+  border: 1px solid #edcf9c;
+  border-radius: 10px;
+  color: #7b480e;
+}
+.replay-banner strong {
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.replay-banner p {
+  font-size: 14px;
+  margin-top: 5px;
+}
+.replay-budget {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 22px;
+  margin-bottom: 24px;
+}
+.replay-budget > div {
+  flex: 1;
+}
+.replay-budget span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.replay-budget strong {
+  font-size: 14px;
+}
+.replay-budget p {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 220px;
+}
+.replay-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 24px;
+  align-items: start;
+}
+.replay-cases {
+  display: grid;
+  gap: 16px;
+}
+.replay-case {
+  padding: 22px;
+  text-align: left;
+  color: var(--navy);
+}
+.replay-case.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+.replay-case h2 {
+  margin-top: 14px;
+}
+.replay-case > strong {
+  display: block;
+  font-size: 23px;
+  margin-top: 8px;
+}
+.replay-case p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.8;
+}
+.replay-detail {
+  padding: 26px;
+}
+.replay-detail h2 {
+  font-size: 23px;
+  margin: 14px 0 25px;
+}
+.replay-detail .timeline p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 7px;
+  line-height: 1.8;
+}
+.replay-detail .timeline strong {
+  font-size: 14px;
+}
+.replay-detail dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.replay-detail dd {
+  margin: 5px 0 15px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.replay-link {
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+}
+@media (max-width: 760px) {
+  .replay-layout {
+    grid-template-columns: 1fr;
+  }
+  .replay-budget {
+    flex-wrap: wrap;
+  }
+  .replay-budget > p {
+    max-width: none;
+    width: 100%;
+  }
+  .replay-page {
+    padding: 20px 16px;
+  }
+  .replay-banner {
+    padding: 16px;
+  }
+  .replay-banner p {
+    font-size: 12px;
+  }
+  .replay-detail {
+    padding: 22px;
+  }
+}

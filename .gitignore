@@ -6,3 +6,4 @@ data/
 !.env.example
 *.log
 .local/
+public/third-party-licenses.txt

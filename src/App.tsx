@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -37,6 +46,7 @@ import type {
   PlanRecord,
   Mandate,
 } from '../shared/types.js';
+const AuditGrid = lazy(() => import('./AuditGrid.js'));
 
 const money = (cents: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -199,6 +209,9 @@ function Login({ health, onLogin }: { health: Health | null; onLogin: () => void
             <span className="status-dot" />
             Sandbox workspace · USD only
           </div>
+          <a className="text-button replay-link" href="/replay">
+            View read-only fixture replay <ArrowRight size={14} />
+          </a>
         </form>
       </div>
       <footer className="login-footer">
@@ -220,6 +233,14 @@ export function App() {
   const [toast, setToast] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [advancedAudit, setAdvancedAudit] = useState(false);
+  const [desktop, setDesktop] = useState(() => matchMedia('(min-width:761px)').matches);
+  useEffect(() => {
+    const query = matchMedia('(min-width:761px)');
+    const update = () => setDesktop(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const callbackHandled = useRef(false);
   const refresh = useCallback(async () => {
     const [dashboard, catalog, health] = await Promise.all([
@@ -637,26 +658,34 @@ export function App() {
                       From the first policy check to the final receipt.
                     </p>
                   </div>
-                  <button
-                    className="secondary compact"
-                    onClick={() =>
-                      act(async () => {
-                        const record = await api('/audit');
-                        const blob = new Blob([JSON.stringify(record, null, 2)], {
-                          type: 'application/json',
-                        });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'mandate-audit.json';
-                        a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      })
-                    }
-                  >
-                    <Download size={15} />
-                    Export audit
-                  </button>
+                  <div className="button-row">
+                    <button
+                      className="secondary compact desktop-action"
+                      onClick={() => setAdvancedAudit((v) => !v)}
+                    >
+                      {advancedAudit ? 'Simple activity' : 'Advanced audit'}
+                    </button>
+                    <button
+                      className="secondary compact"
+                      onClick={() =>
+                        act(async () => {
+                          const record = await api('/audit');
+                          const blob = new Blob([JSON.stringify(record, null, 2)], {
+                            type: 'application/json',
+                          });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'mandate-audit.json';
+                          a.click();
+                          setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        })
+                      }
+                    >
+                      <Download size={15} />
+                      Export audit
+                    </button>
+                  </div>
                 </div>
                 <div className="table-toolbar">
                   <div className="search-field">
@@ -697,6 +726,10 @@ export function App() {
                       ? 'Try another search or status.'
                       : 'Describe what your team needs in the purchase desk. Every request gets a policy decision before checkout.'}
                   </Empty>
+                ) : desktop && advancedAudit ? (
+                  <Suspense fallback={<p className="grid-loading">Loading audit grid…</p>}>
+                    <AuditGrid purchases={rows} onOpen={setSelectedId} />
+                  </Suspense>
                 ) : (
                   <div className="purchase-table">
                     <div className="table-head">
