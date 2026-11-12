@@ -6,4 +6,5 @@ data/
 !.env.example
 *.log
 .local/
+__pycache__/
 public/third-party-licenses.txt
