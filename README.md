@@ -6,6 +6,14 @@ Implementation follows [the PRD](PayPal-Hackathon-Mandate-Lite-PRD.md). This is 
 
 ## Development
 
+### Interface and brand
+
+The Boundary identity uses an original SVG mark, mineral ivory/graphite themes, citron accents, locally hosted Manrope and Space Grotesk, and hand-authored CSS/SVG motion. Appearance follows the device initially and can be changed before sign-in or from the workspace. Mobile has persistent labelled navigation.
+
+Open `/brand` for the logo, palette, typography study, and SVG downloads; `/replay` remains a separate simulated walkthrough. The design rationale and user stories are in [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) and [USER_JOURNEYS.md](docs/USER_JOURNEYS.md). All coding agents should follow [AGENTS.md](AGENTS.md); [claude.md](claude.md) uses the same agreement. Current verification is recorded in [REDESIGN_QA.md](docs/REDESIGN_QA.md).
+
+### Run locally
+
 Requires Node.js 24.14 or newer and npm.
 
 ```powershell

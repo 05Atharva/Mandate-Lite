@@ -3,16 +3,26 @@
   margin: auto;
   padding: 28px 24px;
 }
+.replay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.replay-header .brand {
+  padding: 0;
+}
 .replay-banner {
   display: flex;
   gap: 14px;
   align-items: center;
   padding: 18px 22px;
   margin: 14px 0 32px;
-  background: #fff6e7;
-  border: 1px solid #edcf9c;
+  background: var(--amber-bg);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  color: #7b480e;
+  color: var(--amber);
 }
 .replay-banner strong {
   font-size: 13px;
@@ -62,8 +72,8 @@
   color: var(--navy);
 }
 .replay-case.selected {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px #2563eb;
+  border-color: var(--brand-text);
+  box-shadow: 0 0 0 1px var(--brand-text);
 }
 .replay-case h2 {
   margin-top: 14px;

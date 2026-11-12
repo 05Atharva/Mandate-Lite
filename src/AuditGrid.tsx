@@ -13,6 +13,7 @@ import {
 import { Download } from 'lucide-react';
 import type { Purchase } from '../shared/types.js';
 import { csvCell } from '../shared/export.js';
+import { useTheme } from './Theme.js';
 
 ModuleRegistry.registerModules([
   ClientSideRowModelModule,
@@ -20,16 +21,6 @@ ModuleRegistry.registerModules([
   TextFilterModule,
   NumberFilterModule,
 ]);
-const theme = themeQuartz.withParams({
-  fontFamily: 'inherit',
-  fontSize: 13,
-  accentColor: '#2563eb',
-  foregroundColor: '#14213d',
-  borderColor: '#e5eaf2',
-  headerBackgroundColor: '#f7f9fc',
-  wrapperBorder: false,
-  browserColorScheme: 'light',
-});
 export default function AuditGrid({
   purchases,
   onOpen,
@@ -38,6 +29,22 @@ export default function AuditGrid({
   onOpen: (id: string) => void;
 }) {
   const grid = useRef<AgGridReact<Purchase>>(null);
+  const { resolved } = useTheme();
+  const theme = useMemo(
+    () =>
+      themeQuartz.withParams({
+        fontFamily: 'Manrope, sans-serif',
+        fontSize: 14,
+        accentColor: resolved === 'dark' ? '#d9f36b' : '#52652b',
+        backgroundColor: resolved === 'dark' ? '#22251f' : '#fffefa',
+        foregroundColor: resolved === 'dark' ? '#f1f2e9' : '#252920',
+        borderColor: resolved === 'dark' ? '#41463b' : '#dedfd5',
+        headerBackgroundColor: resolved === 'dark' ? '#292d25' : '#f0f1e9',
+        wrapperBorder: false,
+        browserColorScheme: resolved,
+      }),
+    [resolved],
+  );
   const columns = useMemo<ColDef<Purchase>[]>(
     () => [
       { field: 'title', headerName: 'Purchase', flex: 2, minWidth: 180 },

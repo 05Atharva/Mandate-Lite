@@ -211,7 +211,7 @@ test('Groq uses its own endpoint/key, persists actual provenance, and excludes r
     );
     assert.equal(plan.provider, 'Groq');
     assert.equal(plan.model, 'actual-provider-model');
-    assert.equal(plan.templateVersion, 'catalog-planner-v2');
+    assert.equal(plan.templateVersion, 'catalog-planner-v3');
     assert.ok(!JSON.stringify(store.events()).includes('PRIVATE-TRACE'));
     assert.ok(
       !String(store.db.prepare('SELECT data FROM plans').get()!.data).includes('groq-test-key'),

@@ -2,12 +2,20 @@ import { useState } from 'react';
 import { ArrowLeft, FileCheck2, ShieldCheck } from 'lucide-react';
 import { replayCases } from '../shared/replay-fixtures.js';
 import './replay.css';
+import { Brand } from './Brand.js';
+import { ThemeControl } from './Theme.js';
 const dollars = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n / 100);
 export function Replay() {
   const [selected, setSelected] = useState(replayCases[0]);
   return (
     <div className="replay-page">
+      <header className="replay-header">
+        <a href="/" className="brand" aria-label="Mandate Lite home">
+          <Brand />
+        </a>
+        <ThemeControl />
+      </header>
       <a className="text-button" href="/">
         <ArrowLeft size={17} />
         Open live workspace

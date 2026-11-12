@@ -1,6 +1,6 @@
 # PRD coverage
 
-This separates code coverage from account-dependent acceptance. **Full PRD acceptance remains pending live PayPal and model execution.** The user chose to supply credentials later; that does not turn fixture tests into live evidence.
+This separates code coverage from account-dependent acceptance. **Full PRD acceptance remains pending.** Actual Groq calls, PayPal sandbox OAuth/create/read, buyer consent, completed $18 capture, and exactly-once spend verification were executed on 11 November 2026. Buyer cancellation, additional real-provider recovery checks, and final model-quality acceptance remain incomplete. See [PRODUCTION_TESTING.md](PRODUCTION_TESTING.md) for current evidence; fixture tests remain distinct from live evidence.
 
 | Requirement               | Code and local verification                                                                                                                                                  | Remaining acceptance                                          |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |

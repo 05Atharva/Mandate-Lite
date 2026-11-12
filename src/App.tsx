@@ -37,6 +37,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { api, ApiError, setCsrf } from './api.js';
+import { Brand, BrandMark } from './Brand.js';
+import { ThemeControl } from './Theme.js';
 import type {
   Dashboard,
   Product,
@@ -87,6 +89,7 @@ type View = 'overview' | 'purchase' | 'mandate';
 function Badge({ state }: { state: PurchaseState }) {
   return (
     <span
+      key={state}
       className={`badge ${['READY', 'CAPTURED'].includes(state) ? 'green' : ['REVIEW', 'CHECKING', 'CREATE_UNKNOWN', 'CAPTURING', 'CREATING_ORDER', 'CHECKOUT'].includes(state) ? 'amber' : ['BLOCKED', 'FAILED', 'REJECTED', 'REVOKED'].includes(state) ? 'red' : 'neutral'}`}
     >
       <span className="status-dot" />
@@ -138,24 +141,46 @@ function Login({ health, onLogin }: { health: Health | null; onLogin: () => void
   }
   return (
     <div className="login-page">
-      <div className="login-brand">
-        <span className="brand-mark">
-          <ShieldCheck size={24} />
-        </span>
-        mandate<span className="lite-label">LITE</span>
-      </div>
+      <header className="login-header">
+        <a className="login-brand" href="/" aria-label="Mandate Lite home">
+          <Brand />
+        </a>
+        <ThemeControl />
+      </header>
       <div className="login-content">
         <div className="login-intro">
-          <span className="eyebrow">A LITTLE AUTONOMY. CLEAR BOUNDARIES.</span>
+          <span className="eyebrow">
+            <span className="tiny-square" /> AUTONOMY, WITH INTENTION
+          </span>
           <h1>
-            Let your agent plan.
+            A little freedom.
             <br />
-            <span>Keep permission yours.</span>
+            <span>Clear boundaries.</span>
           </h1>
           <p>
-            One place to set spending limits, review purchases, and see what actually happened at
-            checkout.
+            Give your purchasing agent room to work. Set the limits, make the important calls, and
+            know where every dollar goes.
           </p>
+          <div className="permission-art" aria-hidden="true">
+            <div className="art-grid" />
+            <div className="art-boundary">
+              <span className="art-corner tl" />
+              <span className="art-corner tr" />
+              <span className="art-corner bl" />
+              <span className="art-corner br" />
+              <BrandMark />
+              <span className="art-caption">FREEDOM WITHIN YOUR RULES</span>
+            </div>
+            <div className="art-note art-proposal">
+              <Package size={18} />
+              <span>Agent proposes</span>
+              <span className="art-square" />
+            </div>
+            <div className="art-note art-permission">
+              <Check size={17} />
+              <span>You set the boundaries</span>
+            </div>
+          </div>
           <div className="login-principles">
             <span>
               <ShieldCheck size={18} />
@@ -178,8 +203,9 @@ function Login({ health, onLogin }: { health: Health | null; onLogin: () => void
           <span className="icon-box">
             <LockKeyhole size={23} />
           </span>
-          <h2>Your owner workspace</h2>
-          <p>Sign in to manage your pilot mandate.</p>
+          <span className="eyebrow">YOUR WORKSPACE AWAITS</span>
+          <h2>Welcome to Mandate.</h2>
+          <p>A calmer way to keep purchasing under control.</p>
           {health && !health.ownerConfigured && (
             <div className="notice">
               Owner access is locked. Set <code>OWNER_PASSWORD</code> in your local{' '}
@@ -194,7 +220,7 @@ function Login({ health, onLogin }: { health: Health | null; onLogin: () => void
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            placeholder="Enter your owner password"
+            placeholder="Your owner password"
           />
           {error && (
             <div role="alert" className="error-text">
@@ -210,7 +236,7 @@ function Login({ health, onLogin }: { health: Health | null; onLogin: () => void
             Sandbox workspace · USD only
           </div>
           <a className="text-button replay-link" href="/replay">
-            View read-only fixture replay <ArrowRight size={14} />
+            Explore the fixture walkthrough <ArrowRight size={14} />
           </a>
         </form>
       </div>
@@ -228,6 +254,23 @@ export function App() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const openPurchase = useCallback((id: string) => {
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedId(id);
+  }, []);
+  useEffect(() => {
+    if (selectedId !== null || !returnFocus.current) return;
+    const target = returnFocus.current;
+    returnFocus.current = null;
+    // Restore only after React has removed inert from the workspace.
+    const frame = requestAnimationFrame(() => {
+      if (target.isConnected) target.focus();
+      else document.getElementById('workspace-content')?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
@@ -304,7 +347,7 @@ export function App() {
               }
             : current,
         );
-        setSelectedId(purchase.id);
+        openPurchase(purchase.id);
         setToast(
           outcome === 'cancel'
             ? 'Buyer returned from cancellation. Close the request below to release the reservation.'
@@ -329,6 +372,22 @@ export function App() {
   async function signedIn() {
     setLoggedIn(true);
     await refresh();
+  }
+  async function signOut() {
+    setBusy(true);
+    try {
+      await api('/session', undefined, 'DELETE');
+      setLoggedIn(false);
+      setCsrf('');
+      setData(null);
+      setSelectedId(null);
+      setError('');
+      setToast('');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
   if (initializing)
     return (
@@ -372,7 +431,10 @@ export function App() {
   );
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <a className="skip-link" href="#workspace-content">
+        Skip to workspace
+      </a>
+      <aside className="sidebar" inert={selectedId ? true : undefined}>
         <a
           className="brand"
           href="/"
@@ -381,10 +443,7 @@ export function App() {
             setView('overview');
           }}
         >
-          <span className="brand-mark">
-            <ShieldCheck size={22} />
-          </span>
-          mandate<span className="lite-label">LITE</span>
+          <Brand />
         </a>
         <div className="workspace-switch">
           <span className="workspace-logo">S</span>
@@ -406,10 +465,11 @@ export function App() {
             <button
               key={item.id}
               className={view === item.id ? 'nav-item active' : 'nav-item'}
+              aria-current={view === item.id ? 'page' : undefined}
               onClick={() => setView(item.id)}
             >
               <item.icon size={19} />
-              {item.label}
+              <span>{item.label}</span>
               {item.id === 'overview' && reviews.length > 0 && (
                 <span className="nav-count">{reviews.length}</span>
               )}
@@ -417,22 +477,16 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <a className="sidebar-replay" href="/replay">
+            <FileCheck2 size={17} /> Fixture walkthrough <ArrowUpRight size={14} />
+          </a>
           <div className="boundary-card">
             <ShieldCheck size={21} />
             <strong>Permission is explicit.</strong>
             <p>Your agent can propose a basket. Your mandate controls what happens next.</p>
             <span>One merchant · USD only</span>
           </div>
-          <button
-            className="profile"
-            onClick={() =>
-              act(async () => {
-                await api('/session', undefined, 'DELETE');
-                setLoggedIn(false);
-                setCsrf('');
-              })
-            }
-          >
+          <button className="profile" disabled={busy} onClick={signOut}>
             <span className="avatar">OW</span>
             <span>
               <strong>Workspace owner</strong>
@@ -442,7 +496,7 @@ export function App() {
           </button>
         </div>
       </aside>
-      <div className="main-shell">
+      <div className="main-shell" inert={selectedId ? true : undefined}>
         <header className="topbar">
           <div className="breadcrumb">
             Workspace <ChevronRight size={14} />
@@ -455,31 +509,43 @@ export function App() {
             </span>
           </div>
           <div className="topbar-right">
+            <ThemeControl />
             <span className="sandbox-pill">
               <span className="status-dot" />
               Sandbox
             </span>
             <span className="divider" />
             <span className="avatar small">OW</span>
+            <button
+              className="icon-button mobile-signout"
+              aria-label="Sign out"
+              disabled={busy}
+              onClick={signOut}
+            >
+              <LogOut size={17} />
+            </button>
           </div>
         </header>
-        <main>
+        <main id="workspace-content" tabIndex={-1}>
           <div className="page-heading">
             <div>
-              <span className="eyebrow">CONTROLLED COMMERCE</span>
+              <span className="eyebrow">
+                <span className="tiny-square" /> STUDIO WORKSPACE /{' '}
+                {view === 'overview' ? '01' : view === 'purchase' ? '02' : '03'}
+              </span>
               <h1>
                 {view === 'overview'
-                  ? 'Your purchasing, under control.'
+                  ? 'Room to work. Rules to trust.'
                   : view === 'purchase'
-                    ? 'A need. A basket. A clear decision.'
-                    : 'Set the boundaries once.'}
+                    ? 'What’s on your team’s list?'
+                    : 'Your rules. Set with intention.'}
               </h1>
               <p>
                 {view === 'overview'
-                  ? 'A clear view of your budget, approvals, and every purchasing decision.'
+                  ? 'Your team’s spending, decisions, and next steps. All in one place.'
                   : view === 'purchase'
-                    ? 'Let AI prepare a catalog basket, then put it through your spending rules.'
-                    : 'Your agent gets useful freedom. You keep the final say on spending.'}
+                    ? 'Describe the need. Shape the basket. Keep permission explicit.'
+                    : 'Give your agent a clear budget and a little room to work.'}
               </p>
             </div>
             {view === 'overview' && (
@@ -515,301 +581,319 @@ export function App() {
               </button>
             </div>
           )}
-          {view === 'overview' && (
-            <>
-              <section className="budget-strip" aria-label="Pilot budget">
-                <div className="budget-main">
-                  <div className="section-kicker">
-                    <span className="icon-box small">
-                      <ShieldCheck size={19} />
-                    </span>
-                    Pilot budget
-                    {m && (
-                      <span
-                        className={`text-status ${m.revokedAt || m.expiresAt <= new Date().toISOString() ? 'red-text' : ''}`}
-                      >
-                        {m.revokedAt
-                          ? 'Revoked'
-                          : m.expiresAt <= new Date().toISOString()
-                            ? 'Expired'
-                            : 'Active mandate'}
+          <div key={view} className="workspace-view">
+            {view === 'overview' && (
+              <>
+                <section className="budget-strip" aria-label="Pilot budget">
+                  <div className="budget-main">
+                    <div className="section-kicker">
+                      <span className="icon-box small">
+                        <ShieldCheck size={19} />
                       </span>
-                    )}
-                  </div>
-                  <div className="budget-value">
-                    {money(m?.budgetCents ?? 0)}
-                    <span>USD</span>
-                  </div>
-                  <div className="progress-track">
-                    <div style={{ width: `${usedPercent}%` }} />
-                  </div>
-                  <p>
-                    {m
-                      ? 'One bounded pilot. No automatic resets.'
-                      : 'Activate a mandate to start the pilot.'}
-                  </p>
-                </div>
-                <BudgetStat
-                  icon={<ArrowUpRight size={18} />}
-                  label="Spent"
-                  value={money(data.budget.spentCents)}
-                  hint="Completed payments"
-                />
-                <BudgetStat
-                  icon={<Clock3 size={18} />}
-                  label="Reserved"
-                  value={money(data.budget.reservedCents)}
-                  hint="Held for active requests"
-                />
-                <BudgetStat
-                  icon={<ArrowDownLeft size={18} />}
-                  label="Available"
-                  value={money(data.budget.availableCents)}
-                  hint="Ready for new requests"
-                  accent
-                />
-              </section>
-              {!m && (
-                <div className="activation-callout">
-                  <span className="icon-box">
-                    <SlidersHorizontal size={23} />
-                  </span>
-                  <div>
-                    <h3>A clear mandate comes first.</h3>
-                    <p>
-                      Publish your budget, allowed categories, and review threshold to get started.
-                    </p>
-                  </div>
-                  <button className="primary" onClick={() => setView('mandate')}>
-                    Set up mandate
-                    <ArrowRight size={17} />
-                  </button>
-                </div>
-              )}
-              <div className="overview-grid">
-                <section className="panel">
-                  <div className="panel-heading">
-                    <h2>
-                      Needs your attention <span className="count">{reviews.length}</span>
-                    </h2>
-                    <span className="muted small-text">Owner review</span>
-                  </div>
-                  {reviews.length === 0 ? (
-                    <Empty icon={<CheckCheck size={27} />} title="You're all caught up">
-                      Purchases that need your permission will appear here. Your agent cannot
-                      approve them.
-                    </Empty>
-                  ) : (
-                    <div className="review-list">
-                      {reviews.map((p) => (
-                        <button
-                          key={p.id}
-                          className="review-row"
-                          onClick={() => setSelectedId(p.id)}
+                      Pilot budget
+                      {m && (
+                        <span
+                          className={`text-status ${m.revokedAt || m.expiresAt <= new Date().toISOString() ? 'red-text' : ''}`}
                         >
-                          <ProductIcon category={p.basket[0].category} />
-                          <div>
-                            <strong>{p.title}</strong>
-                            <small>
-                              {p.basket.length} catalog {p.basket.length === 1 ? 'item' : 'items'} ·
-                              Expires {when(p.expiresAt)}
-                            </small>
+                          {m.revokedAt
+                            ? 'Revoked'
+                            : m.expiresAt <= new Date().toISOString()
+                              ? 'Expired'
+                              : 'Active mandate'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="budget-value">
+                      {money(m?.budgetCents ?? 0)}
+                      <span>USD</span>
+                    </div>
+                    <div className="progress-track">
+                      <div style={{ width: `${usedPercent}%` }} />
+                    </div>
+                    <p>
+                      {m
+                        ? 'One bounded pilot. No automatic resets.'
+                        : 'Activate a mandate to start the pilot.'}
+                    </p>
+                    <svg
+                      className="budget-motif"
+                      viewBox="0 0 140 140"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path d="M16 94V26h68M56 114h68V46" stroke="currentColor" strokeWidth="1" />
+                      <path
+                        d="M40 90V48l30 30 30-30v42"
+                        stroke="currentColor"
+                        strokeWidth="9"
+                        strokeLinejoin="round"
+                      />
+                      <path d="M108 18h16v16h-16z" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <BudgetStat
+                    icon={<ArrowUpRight size={18} />}
+                    label="Spent"
+                    value={money(data.budget.spentCents)}
+                    hint="Completed payments"
+                  />
+                  <BudgetStat
+                    icon={<Clock3 size={18} />}
+                    label="Reserved"
+                    value={money(data.budget.reservedCents)}
+                    hint="Held for active requests"
+                  />
+                  <BudgetStat
+                    icon={<ArrowDownLeft size={18} />}
+                    label="Available"
+                    value={money(data.budget.availableCents)}
+                    hint="Ready for new requests"
+                    accent
+                  />
+                </section>
+                {!m && (
+                  <div className="activation-callout">
+                    <span className="icon-box">
+                      <SlidersHorizontal size={23} />
+                    </span>
+                    <div>
+                      <h3>A clear mandate comes first.</h3>
+                      <p>
+                        Publish your budget, allowed categories, and review threshold to get
+                        started.
+                      </p>
+                    </div>
+                    <button className="primary" onClick={() => setView('mandate')}>
+                      Set up mandate
+                      <ArrowRight size={17} />
+                    </button>
+                  </div>
+                )}
+                <div className="overview-grid">
+                  <section className="panel">
+                    <div className="panel-heading">
+                      <h2>
+                        Your next decisions <span className="count">{reviews.length}</span>
+                      </h2>
+                      <span className="muted small-text">Owner review</span>
+                    </div>
+                    {reviews.length === 0 ? (
+                      <Empty icon={<CheckCheck size={27} />} title="You're all caught up">
+                        Purchases that need your permission will appear here. Your agent cannot
+                        approve them.
+                      </Empty>
+                    ) : (
+                      <div className="review-list">
+                        {reviews.map((p) => (
+                          <button
+                            key={p.id}
+                            className="review-row"
+                            onClick={() => openPurchase(p.id)}
+                          >
+                            <ProductIcon category={p.basket[0].category} />
+                            <div>
+                              <strong>{p.title}</strong>
+                              <small>
+                                {p.basket.length} catalog {p.basket.length === 1 ? 'item' : 'items'}{' '}
+                                · Expires {when(p.expiresAt)}
+                              </small>
+                            </div>
+                            <strong className="review-amount">{money(p.amountCents)}</strong>
+                            <ChevronRight size={18} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  <section className="panel mandate-summary">
+                    <div className="panel-heading">
+                      <h2>Spending guardrails</h2>
+                      <ShieldCheck size={20} />
+                    </div>
+                    <div className="guardrail-row">
+                      <span>Per-order limit</span>
+                      <strong>{m ? money(m.maxOrderCents) : '—'}</strong>
+                    </div>
+                    <div className="guardrail-row">
+                      <span>Review above</span>
+                      <strong>{m ? money(m.ownerReviewAboveCents) : '—'}</strong>
+                    </div>
+                    <div className="guardrail-row">
+                      <span>Request lifetime</span>
+                      <strong>15 minutes</strong>
+                    </div>
+                    <div className="category-tags">
+                      {(m?.allowedCategories ?? ['kitchen', 'office', 'gifts']).map((c) => (
+                        <span key={c}>{c}</span>
+                      ))}
+                    </div>
+                    <button className="text-button" onClick={() => setView('mandate')}>
+                      {m ? 'View published mandate' : 'Configure your mandate'}
+                      <ArrowRight size={15} />
+                    </button>
+                  </section>
+                </div>
+                <section className="panel activity-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h2>Purchase activity</h2>
+                      <p className="muted small-text">
+                        From the first policy check to the final receipt.
+                      </p>
+                    </div>
+                    <div className="button-row">
+                      <button
+                        className="secondary compact desktop-action"
+                        onClick={() => setAdvancedAudit((v) => !v)}
+                      >
+                        {advancedAudit ? 'Simple activity' : 'Advanced audit'}
+                      </button>
+                      <button
+                        className="secondary compact"
+                        onClick={() =>
+                          act(async () => {
+                            const record = await api('/audit');
+                            const blob = new Blob([JSON.stringify(record, null, 2)], {
+                              type: 'application/json',
+                            });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'mandate-audit.json';
+                            a.click();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          })
+                        }
+                      >
+                        <Download size={15} />
+                        Export audit
+                      </button>
+                    </div>
+                  </div>
+                  <div className="table-toolbar">
+                    <div className="search-field">
+                      <Search size={16} />
+                      <input
+                        aria-label="Search purchases"
+                        placeholder="Search purchases…"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                      />
+                    </div>
+                    <label className="filter">
+                      <SlidersHorizontal size={15} />
+                      <select
+                        aria-label="Filter purchase status"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                      >
+                        <option value="all">All statuses</option>
+                        {Object.entries(labels).map(([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {rows.length === 0 ? (
+                    <Empty
+                      icon={<ShoppingBag size={26} />}
+                      title={
+                        data.purchases.length
+                          ? 'No matching purchases'
+                          : 'Your first purchase starts here'
+                      }
+                    >
+                      {data.purchases.length
+                        ? 'Try another search or status.'
+                        : 'Describe what your team needs in the purchase desk. Every request gets a policy decision before checkout.'}
+                    </Empty>
+                  ) : desktop && advancedAudit ? (
+                    <Suspense fallback={<p className="grid-loading">Loading audit grid…</p>}>
+                      <AuditGrid purchases={rows} onOpen={openPurchase} />
+                    </Suspense>
+                  ) : (
+                    <div className="purchase-table">
+                      <div className="table-head">
+                        <span>PURCHASE</span>
+                        <span>POLICY / PAYMENT</span>
+                        <span>AMOUNT</span>
+                        <span>CREATED</span>
+                        <span />
+                      </div>
+                      {rows.map((p) => (
+                        <button className="table-row" key={p.id} onClick={() => openPurchase(p.id)}>
+                          <div className="purchase-name">
+                            <ProductIcon category={p.basket[0].category} />
+                            <div>
+                              <strong>{p.title}</strong>
+                              <small>
+                                {p.source === 'model' ? 'AI planned' : 'Manual catalog'} ·{' '}
+                                {p.id.slice(0, 8)}
+                              </small>
+                            </div>
                           </div>
-                          <strong className="review-amount">{money(p.amountCents)}</strong>
-                          <ChevronRight size={18} />
+                          <Badge state={p.state} />
+                          <strong className="table-amount">{money(p.amountCents)}</strong>
+                          <span className="table-date">{when(p.createdAt)}</span>
+                          <ChevronRight size={17} />
                         </button>
                       ))}
                     </div>
                   )}
+                  <div className="panel-foot">
+                    <span>{data.purchases.length} purchase requests</span>
+                    <span>
+                      <LockKeyhole size={12} />
+                      Server-verified amounts
+                    </span>
+                  </div>
                 </section>
-                <section className="panel mandate-summary">
-                  <div className="panel-heading">
-                    <h2>Spending guardrails</h2>
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div className="guardrail-row">
-                    <span>Per-order limit</span>
-                    <strong>{m ? money(m.maxOrderCents) : '—'}</strong>
-                  </div>
-                  <div className="guardrail-row">
-                    <span>Review above</span>
-                    <strong>{m ? money(m.ownerReviewAboveCents) : '—'}</strong>
-                  </div>
-                  <div className="guardrail-row">
-                    <span>Request lifetime</span>
-                    <strong>15 minutes</strong>
-                  </div>
-                  <div className="category-tags">
-                    {(m?.allowedCategories ?? ['kitchen', 'office', 'gifts']).map((c) => (
-                      <span key={c}>{c}</span>
-                    ))}
-                  </div>
-                  <button className="text-button" onClick={() => setView('mandate')}>
-                    {m ? 'View published mandate' : 'Configure your mandate'}
-                    <ArrowRight size={15} />
-                  </button>
-                </section>
-              </div>
-              <section className="panel activity-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h2>Purchase activity</h2>
-                    <p className="muted small-text">
-                      From the first policy check to the final receipt.
-                    </p>
-                  </div>
-                  <div className="button-row">
-                    <button
-                      className="secondary compact desktop-action"
-                      onClick={() => setAdvancedAudit((v) => !v)}
-                    >
-                      {advancedAudit ? 'Simple activity' : 'Advanced audit'}
-                    </button>
-                    <button
-                      className="secondary compact"
-                      onClick={() =>
-                        act(async () => {
-                          const record = await api('/audit');
-                          const blob = new Blob([JSON.stringify(record, null, 2)], {
-                            type: 'application/json',
-                          });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'mandate-audit.json';
-                          a.click();
-                          setTimeout(() => URL.revokeObjectURL(url), 1000);
-                        })
-                      }
-                    >
-                      <Download size={15} />
-                      Export audit
-                    </button>
-                  </div>
-                </div>
-                <div className="table-toolbar">
-                  <div className="search-field">
-                    <Search size={16} />
-                    <input
-                      aria-label="Search purchases"
-                      placeholder="Search purchases…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                  </div>
-                  <label className="filter">
-                    <SlidersHorizontal size={15} />
-                    <select
-                      aria-label="Filter purchase status"
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                    >
-                      <option value="all">All statuses</option>
-                      {Object.entries(labels).map(([value, label]) => (
-                        <option value={value} key={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {rows.length === 0 ? (
-                  <Empty
-                    icon={<ShoppingBag size={26} />}
-                    title={
-                      data.purchases.length
-                        ? 'No matching purchases'
-                        : 'Your first purchase starts here'
-                    }
-                  >
-                    {data.purchases.length
-                      ? 'Try another search or status.'
-                      : 'Describe what your team needs in the purchase desk. Every request gets a policy decision before checkout.'}
-                  </Empty>
-                ) : desktop && advancedAudit ? (
-                  <Suspense fallback={<p className="grid-loading">Loading audit grid…</p>}>
-                    <AuditGrid purchases={rows} onOpen={setSelectedId} />
-                  </Suspense>
-                ) : (
-                  <div className="purchase-table">
-                    <div className="table-head">
-                      <span>PURCHASE</span>
-                      <span>POLICY / PAYMENT</span>
-                      <span>AMOUNT</span>
-                      <span>CREATED</span>
-                      <span />
-                    </div>
-                    {rows.map((p) => (
-                      <button className="table-row" key={p.id} onClick={() => setSelectedId(p.id)}>
-                        <div className="purchase-name">
-                          <ProductIcon category={p.basket[0].category} />
-                          <div>
-                            <strong>{p.title}</strong>
-                            <small>
-                              {p.source === 'model' ? 'AI planned' : 'Manual catalog'} ·{' '}
-                              {p.id.slice(0, 8)}
-                            </small>
-                          </div>
-                        </div>
-                        <Badge state={p.state} />
-                        <strong className="table-amount">{money(p.amountCents)}</strong>
-                        <span className="table-date">{when(p.createdAt)}</span>
-                        <ChevronRight size={17} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="panel-foot">
-                  <span>{data.purchases.length} purchase requests</span>
-                  <span>
-                    <LockKeyhole size={12} />
-                    Server-verified amounts
-                  </span>
-                </div>
-              </section>
-              <IntegrationStatus health={health} />
-            </>
-          )}
-          {view === 'purchase' && (
-            <PurchaseDesk
-              products={products}
-              health={health}
-              hasMandate={Boolean(m)}
-              onSubmitted={(p) => {
-                // The response already contains the persisted purchase. Seed the
-                // drawer immediately while refreshing budget and audit state.
-                setData((current) =>
-                  current
-                    ? {
-                        ...current,
-                        purchases: [p, ...current.purchases.filter((item) => item.id !== p.id)],
-                      }
-                    : current,
-                );
-                setSelectedId(p.id);
-                refresh().catch((e) => setError(e.message));
-              }}
-              onError={setError}
-            />
-          )}
-          {view === 'mandate' && (
-            <MandateView
-              mandate={m}
-              busy={busy}
-              onActivate={(input) =>
-                act(
-                  () => api('/mandate', input),
-                  'Mandate activated. Its spending rules are now locked for this pilot.',
-                )
-              }
-              onRevoke={() =>
-                act(
-                  () => api('/mandate/revoke', {}),
-                  'Mandate revoked. In-flight payments remain reserved until verified.',
-                )
-              }
-            />
-          )}
+                <IntegrationStatus health={health} />
+              </>
+            )}
+            {view === 'purchase' && (
+              <PurchaseDesk
+                products={products}
+                health={health}
+                hasMandate={Boolean(m)}
+                onSubmitted={(p) => {
+                  // The response already contains the persisted purchase. Seed the
+                  // drawer immediately while refreshing budget and audit state.
+                  setData((current) =>
+                    current
+                      ? {
+                          ...current,
+                          purchases: [p, ...current.purchases.filter((item) => item.id !== p.id)],
+                        }
+                      : current,
+                  );
+                  openPurchase(p.id);
+                  refresh().catch((e) => setError(e.message));
+                }}
+                onError={setError}
+              />
+            )}
+            {view === 'mandate' && (
+              <MandateView
+                mandate={m}
+                busy={busy}
+                onActivate={(input) =>
+                  act(
+                    () => api('/mandate', input),
+                    'Mandate activated. Its spending rules are now locked for this pilot.',
+                  )
+                }
+                onRevoke={() =>
+                  act(
+                    () => api('/mandate/revoke', {}),
+                    'Mandate revoked. In-flight payments remain reserved until verified.',
+                  )
+                }
+              />
+            )}
+          </div>
           <footer className="main-footer">
             <span>
               <ShieldCheck size={14} />
@@ -826,8 +910,10 @@ export function App() {
           audit={data.audit}
           health={health}
           busy={busy}
+          error={error}
           onClose={() => {
             setSelectedId(null);
+            setError('');
             if (location.pathname.startsWith('/checkout/')) history.replaceState({}, '', '/');
           }}
           act={act}
@@ -964,6 +1050,19 @@ function PurchaseDesk({
   );
   return (
     <>
+      <div className="journey-strip" aria-label="Purchase journey">
+        <div className={`journey-step ${items.length === 0 ? 'current' : ''}`}>
+          <span>01</span>Describe a need
+          <ChevronRight size={14} />
+        </div>
+        <div className={`journey-step ${items.length > 0 ? 'current' : ''}`}>
+          <span>02</span>Shape the basket
+          <ChevronRight size={14} />
+        </div>
+        <div className="journey-step">
+          <span>03</span>Check permission
+        </div>
+      </div>
       <div className="desk-grid">
         <section className="panel desk-input">
           <div className="panel-heading">
@@ -978,6 +1077,7 @@ function PurchaseDesk({
               Purchasing need
             </label>
             <textarea
+              disabled={planning}
               id="need"
               maxLength={2000}
               minLength={1}
@@ -1051,6 +1151,12 @@ function PurchaseDesk({
               </button>
             )}
           </form>
+          {planning && (
+            <div className="planning-status" role="status">
+              <span>Matching your need to the studio catalog…</span>
+              <div className="planning-indicator" aria-hidden="true" />
+            </div>
+          )}
           {plan && (
             <div
               className={`plan-result ${plan.output.kind === 'clarification' ? 'clarification' : ''}`}
@@ -1076,7 +1182,12 @@ function PurchaseDesk({
             </div>
           )}
           <div className="manual-toggle">
-            <button className="text-button" onClick={() => setShowCatalog(!showCatalog)}>
+            <button
+              className="text-button"
+              aria-expanded={showCatalog}
+              aria-controls="manual-catalog"
+              onClick={() => setShowCatalog(!showCatalog)}
+            >
               <Package size={16} />
               {showCatalog ? 'Hide manual catalog' : 'Select from catalog manually'}
               <ChevronRight size={15} />
@@ -1175,7 +1286,7 @@ function PurchaseDesk({
         </section>
       </div>
       {showCatalog && (
-        <section className="panel catalog-panel">
+        <section className="panel catalog-panel" id="manual-catalog">
           <div className="panel-heading">
             <div>
               <h2>The studio catalog</h2>
@@ -1480,6 +1591,7 @@ function PurchaseDrawer({
   audit,
   health,
   busy,
+  error,
   onClose,
   act,
 }: {
@@ -1488,6 +1600,7 @@ function PurchaseDrawer({
   audit: Dashboard['audit'];
   health: Health | null;
   busy: boolean;
+  error: string;
   onClose: () => void;
   act: (task: () => Promise<unknown>, message?: string) => Promise<void>;
 }) {
@@ -1498,22 +1611,45 @@ function PurchaseDrawer({
   const [detailError, setDetailError] = useState('');
   const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const [leaving, setLeaving] = useState(false);
+  const closeTimer = useRef<number | undefined>(undefined);
+  const closeRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  closeRef.current = onClose;
+  busyRef.current = busy;
+  const requestClose = useCallback(() => {
+    if (busyRef.current || closeTimer.current !== undefined) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      closeRef.current();
+      return;
+    }
+    setLeaving(true);
+    closeTimer.current = window.setTimeout(() => closeRef.current(), 160);
+  }, []);
   const p = purchases.find((p) => p.id === id);
   useEffect(() => {
+    let active = true;
+    setDetailError('');
     api<{
       operations: { kind: string; operation_id: string; state: string }[];
       plan: PlanRecord | null;
     }>(`/intents/${id}`)
-      .then(setDetails)
-      .catch((e) => setDetailError(e.message));
+      .then((value) => {
+        if (active) setDetails(value);
+      })
+      .catch((e) => {
+        if (active) setDetailError(e.message);
+      });
+    return () => {
+      active = false;
+    };
   }, [id, p?.state]);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
     closeButton.current?.focus();
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     function handle(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !busy) onClose();
+      if (e.key === 'Escape') requestClose();
       if (e.key === 'Tab') {
         const elements = dialog.current?.querySelectorAll<HTMLElement>(
           'button:not(:disabled),a[href],input,select,textarea,summary,[tabindex="0"]',
@@ -1534,16 +1670,16 @@ function PurchaseDrawer({
     return () => {
       document.body.style.overflow = overflow;
       document.removeEventListener('keydown', handle);
-      previous?.focus();
+      window.clearTimeout(closeTimer.current);
     };
-  }, [onClose, busy]);
+  }, [requestClose]);
   const post = (action: string, body: unknown = {}, message?: string) =>
     act(() => api(`/intents/${id}/${action}`, body), message);
   return (
     <div
-      className="drawer-backdrop"
+      className={`drawer-backdrop ${leaving ? 'is-leaving' : ''}`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div
@@ -1558,7 +1694,8 @@ function PurchaseDrawer({
           <button
             ref={closeButton}
             className="icon-button"
-            onClick={onClose}
+            onClick={requestClose}
+            disabled={busy}
             aria-label="Close purchase details"
           >
             <X size={21} />
@@ -1572,6 +1709,12 @@ function PurchaseDrawer({
         ) : (
           <>
             <div className="drawer-content">
+              {error && (
+                <div className="banner error" role="alert">
+                  <CircleAlert size={18} />
+                  <span>{error}</span>
+                </div>
+              )}
               <Badge state={p.state} />
               <h2 id="drawer-title">{p.title}</h2>
               <div className="receipt-amount">

@@ -1,24 +1,24 @@
 # Live integration gate
 
-Live gate status: **not executed**. Local automated and browser checks are recorded in [VISUAL_QA.md](VISUAL_QA.md) and [PRD_COVERAGE.md](PRD_COVERAGE.md). Use isolated sandbox accounts and retain redacted request/order/capture references when actually running the live gate.
+Live gate status: **partially executed on 11 November 2026**. Real Groq responses and PayPal sandbox OAuth/create/read, buyer consent, completed $18 capture, and exactly-once ledger verification succeeded against the production build. Buyer cancellation and final model explanation-quality acceptance remain pending. See [PRODUCTION_TESTING.md](PRODUCTION_TESTING.md) for current evidence. Earlier local automated and browser checks are recorded in [VISUAL_QA.md](VISUAL_QA.md) and [PRD_COVERAGE.md](PRD_COVERAGE.md).
 
 ## Prerequisites
 
 - Node 24.14+, installed dependencies and an untracked `.env`.
 - Distinct owner and agent credentials.
 - PayPal sandbox seller client ID, secret and matching merchant ID; a separate sandbox buyer.
-- OpenAI API key and access to the configured structured-output model. Model calls can incur actual charges.
+- Groq or OpenAI API key and access to the configured structured-output model. Model calls can incur actual charges.
 - Browser approval for the local origin.
 
 ## Gate G1
 
-- [ ] Sign in, activate a fresh pilot mandate and submit the $18 coffee.
-- [ ] Create an actual sandbox order and record its order ID.
-- [ ] Complete buyer consent at PayPal; explicitly verify and capture on return.
-- [ ] Confirm the capture is `COMPLETED`, amount/currency/payee match, and spent increases by exactly $18.
-- [ ] Refresh the saved order; verify spend is not counted twice.
+- [x] Sign in, activate a fresh isolated pilot mandate and submit the $18 coffee (manual catalog submission).
+- [x] Create an actual sandbox order and record its order ID in the untracked integration report.
+- [x] Complete buyer consent at PayPal; explicitly verify and capture on return.
+- [x] Confirm the capture is `COMPLETED`, amount/currency/payee match, and spent increases by exactly $18.
+- [x] Refresh the saved order twice; verify spend is not counted twice, with one capture operation and one payment-completed event.
 - [ ] Create a separate permitted request, observe PayPal cancellation, and close without payment. It must remain unpaid and release only before a capture claim.
-- [ ] Run one real model plan and save its actual model identifier and structured selection.
+- [x] Run real Groq plans and save the actual model identifier and structured selections. Explanation-quality review is not fully accepted; see the testing record.
 
 If G1 fails, capture the sanitized error and fix integration before presenting a working payment claim.
 
